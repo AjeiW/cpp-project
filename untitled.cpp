@@ -1,443 +1,352 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <bits/stdc++.h>
+
 using namespace std;
+int cnt = 0, i, j, flag2, Myid,   vis = -1;
+int  field;
+char tmps[20];
+int tmpi;
+struct MyAccount {
+	int money, dateint, flag_print;
+	char signal, accname[20], date[20], name[20], type[20], ps[20];
+} MyACC[1000], T;
+void initialDateint() {
+	for (i = 1; i <= cnt; i++) {
+		int size = 1, di = 0;
+		for (j = 7; j >= 0; j--) {
+			di += size * (MyACC[i].date[j] - 48);
+			size *= 10;
+		}
+		MyACC[i].dateint = di;
+	}
+}
+void Hand_Input();
+void File_Input();
+void input() {
+	printf("手动输入账务请输1，文件读取账务请输2\n");
+	scanf("%d", &flag2);
+	if (flag2 == 1)
+		Hand_Input();
+	else if (flag2 == 2)
+		File_Input();
+	initialDateint();
+}
+void Hand_Input() { //输入账目函数
+	int flag;
+	printf("您需要录入多少条账务记录？\n");
+	scanf("%d", &flag);
+	getchar();
+	while (flag--) {
+		cnt++;
+		Myid = cnt;
+		printf("请按顺序输入以下内容:\n开户人 收支金额 交易日期 收支项名称 收支类型 备注信息\n");
+		scanf("%s", MyACC[Myid].accname);
+		scanf(" %c", &MyACC[Myid].signal);
+		scanf("%d", &MyACC[Myid].money);
+		scanf("%s", MyACC[Myid].date);
+		scanf("%s", MyACC[Myid].name);
+		scanf("%s", MyACC[Myid].type);
+		scanf("%s", MyACC[Myid].ps);
+		getchar();
+		printf("第%d条录入完成！\n", cnt);
+	}
+}
+void File_Input() {
+	FILE *fp;
+	if ((fp = fopen("in.txt", "r+")) == NULL) {
+		printf("无法打开文件!请检查是否建立输入文件！\n");
+		exit(0);
+	} else {
+		cnt = 1;
+		while (fscanf(fp, "id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s",
+		              &cnt, MyACC[cnt].accname, &MyACC[cnt].signal, &MyACC[cnt].money, MyACC[cnt].date, MyACC[cnt].name, MyACC[cnt].type, MyACC[cnt].ps) != EOF) {
+			cnt++;
+		}
 
-// -------------------- 日期类 --------------------
-struct Date {
-	int day; // 简化：一年中的第几天 (1~365)
-	Date(int d = 1) : day(d) {}
-	int operator-(const Date& other) const { return day - other.day; }
-};
-
-// -------------------- 抽象账户基类 --------------------
-class Account {
-protected:
-	string id;          // 账号
-	string name;        // 户名
-	double balance;     // 余额
-	double rate;        // 年利率，例如 0.035
-	Date lastDate;      // 上次业务日期
-	double accumulation;// 余额×天数 的累计值
-	static int totalCount; // 静态成员：账户总数
-	
-public:
-	Account(const string& id_, const string& name_,
-		double rate_, const Date& d, double balance_ = 0.0)
-	: id(id_), name(name_), balance(balance_),
-	rate(rate_), lastDate(d), accumulation(0.0) {
-		++totalCount;
+		cnt--;
+		printf("输入完成，共%d条账目", cnt);
+	}
+}
+void load_from_file() {
+	FILE *fp = fopen("out.txt", "r");
+	if (!fp) {
+		printf("未找到 out.txt，将以空账本启动。\n");
+		return;
 	}
 	
-	virtual ~Account() {}
-	
-	const string& getId() const { return id; }
-	const string& getName() const { return name; }
-	double getBalance() const { return balance; }
-	double getRate() const { return rate; }
-	
-	// 利息基数累计：把 [lastDate, d) 之间的 balance*天数 加到 accumulation
-	void accumulate(const Date& d) {
-		int days = d - lastDate;
-		if (days > 0) {
-			accumulation += balance * days;
-			lastDate = d;
-		}
+	cnt = 0;
+	int id;
+	while (fscanf(fp, "%d %19s %c %d %19s %19s %19s %19s",
+		&id,
+		MyACC[cnt + 1].accname,
+		&MyACC[cnt + 1].signal,
+		&MyACC[cnt + 1].money,
+		MyACC[cnt + 1].date,
+		MyACC[cnt + 1].name,
+		MyACC[cnt + 1].type,
+		MyACC[cnt + 1].ps) == 8) {
+		cnt++;
 	}
-	
-	// 存款（所有账户通用）
-	virtual bool deposit(const Date& d, double amount) {
-		if (amount <= 0) return false;
-		accumulate(d);
-		balance += amount;
-		cout << "[存款成功] 账户 " << id << " 当前余额: " << balance << endl;
-		return true;
-	}
-	
-	// 取款（纯虚函数，由派生类按规则实现）
-	virtual bool withdraw(const Date& d, double amount) = 0;
-	
-	// 结息（纯虚函数）
-	virtual void settle(const Date& d) = 0;
-	
-	// 显示基础信息
-	virtual void show() const {
-		cout << "ID: " << id
-		<< "  Name: " << name
-		<< "  Balance: " << balance
-		<< "  Rate: " << rate;
-	}
-	
-	// 返回账户类型字符串（如 SAVING / CREDIT）
-	virtual string getType() const = 0;
-	
-	// 友元输出运算符重载（配合多态）
-	friend ostream& operator<<(ostream& os, const Account& acc) {
-		acc.show();
-		return os;
-	}
-	
-	// 序列化到一行文本：type id name balance rate lastDate accumulation ...
-	virtual void save(ostream& os) const {
-		os << getType() << ' '
-		<< id << ' ' << name << ' '
-		<< balance << ' ' << rate << ' '
-		<< lastDate.day << ' ' << accumulation;
-	}
-	
-	static int getTotalCount() { return totalCount; }
-};
-
-int Account::totalCount = 0;
-
-// -------------------- 储蓄账户 --------------------
-class SavingsAccount : public Account {
-public:
-	SavingsAccount(const string& id_, const string& name_,
-		double rate_, const Date& d, double balance_ = 0.0)
-	: Account(id_, name_, rate_, d, balance_) {}
-	
-	// 不允许透支
-	bool withdraw(const Date& d, double amount) override {
-		if (amount <= 0) return false;
-		if (amount > balance) {
-			cout << "[取款失败] 余额不足。" << endl;
-			return false;
-		}
-		accumulate(d);
-		balance -= amount;
-		cout << "[取款成功] 账户 " << id << " 当前余额: " << balance << endl;
-		return true;
-	}
-	
-	// 年终结息
-	void settle(const Date& d) override {
-		accumulate(d);
-		const int yearDays = 365;
-		double interest = accumulation / yearDays * rate;
-		if (interest != 0) {
-			balance += interest;
-			cout << "[结息] 储蓄账户 " << id
-			<< " 本期利息: " << interest
-			<< "  新余额: " << balance << endl;
-		}
-		accumulation = 0; // 清零，为下一年准备
-	}
-	
-	string getType() const override { return "SAVING"; }
-	
-	void save(ostream& os) const override {
-		Account::save(os); // 无额外字段
-	}
-	
-	void show() const override {
-		cout << "[储蓄账户] ";
-		Account::show();
-		cout << endl;
-	}
-};
-
-// -------------------- 信用卡账户 --------------------
-class CreditAccount : public Account {
-	double creditLimit; // 信用额度
-public:
-	CreditAccount(const string& id_, const string& name_,
-		double rate_, const Date& d,
-		double limit_, double balance_ = 0.0)
-	: Account(id_, name_, rate_, d, balance_), creditLimit(limit_) {}
-	
-	// 可透支到 -creditLimit
-	bool withdraw(const Date& d, double amount) override {
-		if (amount <= 0) return false;
-		accumulate(d);
-		if (balance - amount < -creditLimit) {
-			cout << "[取款失败] 超出信用额度。" << endl;
-			return false;
-		}
-		balance -= amount;
-		cout << "[刷卡/取现成功] 信用账户 " << id
-		<< " 当前余额(负为欠款): " << balance << endl;
-		return true;
-	}
-	
-	// 对欠款部分计息（只在整体为负时生效）
-	void settle(const Date& d) override {
-		accumulate(d);
-		const int yearDays = 365;
-		double interest = 0.0;
-		if (accumulation < 0) {
-			// accumulation 为负，interest 也为负（需要偿还的利息）
-			interest = accumulation / yearDays * rate;
-			balance += interest;
-			cout << "[结息] 信用账户 " << id
-			<< " 本期利息(为负表示需要偿还): " << interest
-			<< "  新余额: " << balance << endl;
-		}
-		accumulation = 0;
-	}
-	
-	void show() const override {
-		cout << "[信用账户] ";
-		Account::show();
-		cout << "  CreditLimit: " << creditLimit << endl;
-	}
-	
-	string getType() const override { return "CREDIT"; }
-	
-	void save(ostream& os) const override {
-		Account::save(os);
-		os << ' ' << creditLimit;
-	}
-};
-
-// -------------------- 银行系统 --------------------
-class BankSystem {
-	vector<Account*> accounts; // 多态存储不同账户
-	Date currentDate;          // 系统当前日
-public:
-	BankSystem() : currentDate(1) {}
-	
-	~BankSystem() {
-		for (auto p : accounts) delete p;
-	}
-	
-	// 按 ID 查找账户
-	Account* findAccount(const string& id) {
-		for (auto p : accounts)
-			if (p->getId() == id) return p;
-		return nullptr;
-	}
-	
-	// 开户
-	void openAccount() {
-		int type;
-		cout << "请选择账户类型 (1-储蓄账户  2-信用卡账户): ";
-		cin >> type;
-		
-		string id, name;
-		double rate, initBalance;
-		cout << "输入账户ID: ";
-		cin >> id;
-		if (findAccount(id)) {
-			cout << "该ID已存在。" << endl;
-			return;
-		}
-		cout << "输入姓名: ";
-		cin >> name;
-		cout << "输入年利率 (如 0.035): ";
-		cin >> rate;
-		cout << "输入开户日 (1~365): ";
-		int day;
-		cin >> day;
-		if (day < 1 || day > 365) {
-			cout << "日期非法。" << endl;
-			return;
-		}
-		currentDate.day = max(currentDate.day, day);
-		cout << "输入初始存款 (可为0): ";
-		cin >> initBalance;
-		
-		if (type == 1) {
-			accounts.push_back(new SavingsAccount(id, name, rate, Date(day), initBalance));
-		} else if (type == 2) {
-			double limit;
-			cout << "输入信用额度: ";
-			cin >> limit;
-			accounts.push_back(new CreditAccount(id, name, rate, Date(day), limit, initBalance));
-		} else {
-			cout << "未知账户类型。" << endl;
-			return;
-		}
-		cout << "开户成功！当前总账户数: " << Account::getTotalCount() << endl;
-	}
-	
-	// 存款
-	void deposit() {
-		string id;
-		cout << "输入账户ID: ";
-		cin >> id;
-		Account* acc = findAccount(id);
-		if (!acc) {
-			cout << "账号不存在。" << endl;
-			return;
-		}
-		int day;
-		double amount;
-		cout << "输入操作日期 (1~365，需 >= 当前日 " << currentDate.day << "): ";
-		cin >> day;
-		if (day < currentDate.day) {
-			cout << "日期不能倒退。" << endl;
-			return;
-		}
-		if (day < 1 || day > 365) {
-			cout << "日期非法。" << endl;
-			return;
-		}
-		currentDate.day = day;
-		cout << "输入存款金额: ";
-		cin >> amount;
-		acc->deposit(currentDate, amount);
-	}
-	
-	// 取款 / 刷卡
-	void withdraw() {
-		string id;
-		cout << "输入账户ID: ";
-		cin >> id;
-		Account* acc = findAccount(id);
-		if (!acc) {
-			cout << "账号不存在。" << endl;
-			return;
-		}
-		int day;
-		double amount;
-		cout << "输入操作日期 (1~365，需 >= 当前日 " << currentDate.day << "): ";
-		cin >> day;
-		if (day < currentDate.day) {
-			cout << "日期不能倒退。" << endl;
-			return;
-		}
-		if (day < 1 || day > 365) {
-			cout << "日期非法。" << endl;
-			return;
-		}
-		currentDate.day = day;
-		cout << "输入取款金额: ";
-		cin >> amount;
-		acc->withdraw(currentDate, amount);
-	}
-	
-	// 年终结息（对所有账户）
-	void settle() {
-		int day;
-		cout << "输入结息日期 (通常为 365): ";
-		cin >> day;
-		if (day < currentDate.day) {
-			cout << "日期不能倒退。" << endl;
-			return;
-		}
-		if (day < 1 || day > 365) {
-			cout << "日期非法。" << endl;
-			return;
-		}
-		currentDate.day = day;
-		for (auto acc : accounts) {
-			acc->settle(currentDate);
-		}
-	}
-	
-	// 单个账户查询
-	void showAccount() {
-		string id;
-		cout << "输入账户ID: ";
-		cin >> id;
-		Account* acc = findAccount(id);
-		if (!acc) {
-			cout << "账号不存在。" << endl;
-			return;
-		}
-		acc->show();
-	}
-	
-	// 列出全部账户
-	void listAll() {
-		cout << "======= 所有账户信息 =======" << endl;
-		for (auto acc : accounts) {
-			acc->show();
-		}
-	}
-	
-	// 保存到文件
-	void saveToFile(const string& filename) {
-		ofstream ofs(filename);
-		if (!ofs) {
-			cout << "保存文件失败。" << endl;
-			return;
-		}
-		ofs << currentDate.day << '\n';
-		ofs << accounts.size() << '\n';
-		for (auto acc : accounts) {
-			acc->save(ofs);
-			ofs << '\n';
-		}
-		cout << "已保存到文件 " << filename << endl;
-	}
-	
-	// 从文件载入
-	void loadFromFile(const string& filename) {
-		ifstream ifs(filename);
-		if (!ifs) {
-			cout << "未找到数据文件，使用空系统。" << endl;
-			return;
-		}
-		for (auto p : accounts) delete p;
-		accounts.clear();
-		
-		int day;
-		size_t n;
-		ifs >> day;
-		currentDate.day = day;
-		ifs >> n;
-		for (size_t i = 0; i < n; ++i) {
-			string type;
-			ifs >> type;
-			string id, name;
-			double balance, rate;
-			int lastDay;
-			double accumu;
-			ifs >> id >> name >> balance >> rate >> lastDay >> accumu;
-			if (type == "SAVING") {
-				auto* p = new SavingsAccount(id, name, rate, Date(lastDay), balance);
-				// 为简单起见，忽略 accumu 的恢复，新的一年重新累计
-				accounts.push_back(p);
-			} else if (type == "CREDIT") {
-				double limit;
-				ifs >> limit;
-				auto* p = new CreditAccount(id, name, rate, Date(lastDay), limit, balance);
-				accounts.push_back(p);
+	fclose(fp);
+	initialDateint();
+	printf("已从 out.txt 加载 %d 条账目记录。\n", cnt);
+}
+void del() { //删除账目函数
+	printf("请输入需要删除的记录ID:\n");
+	scanf("%d", &Myid);
+	//memset(&MyACC[Myid],0,sizeof(MyACC[Myid]));
+	MyACC[Myid].accname[0] = 0;
+	MyACC[Myid].signal = '+';
+	MyACC[Myid].money = 0;
+	MyACC[Myid].date[0] = '0';
+	MyACC[Myid].name[0] = 0;
+	MyACC[Myid].type[0] = 0;
+	MyACC[Myid].ps[0] = 0;
+	printf("删除成功！\n\n");
+}
+void chaxun() {
+	printf("查询全部记录输入1，按字段查询输入2\n");
+	scanf("%d", &flag2);
+	if (flag2 == 1) {  //查询全部记录
+		printf("查询成功！\n\n");
+		for (i = 1; i <= cnt; i++)
+			printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n", i, MyACC[i].accname, MyACC[i].signal,
+			       MyACC[i].money, MyACC[i].date, MyACC[i].name, MyACC[i].type, MyACC[i].ps);
+	} else {
+		printf("请输入查询所依据的字段\n1：序号\n2：日期\n3：名称\n4：金额\n");
+		scanf("%d", &flag2);
+		printf("请输入想查询字段的内容\n");
+		if (flag2 == 1) {
+			scanf("%d", &tmpi);
+			printf("查询成功！\n\n");
+			printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n", tmpi, MyACC[tmpi].accname, MyACC[tmpi].signal,
+			       MyACC[tmpi].money, MyACC[tmpi].date, MyACC[tmpi].name, MyACC[tmpi].type, MyACC[tmpi].ps);
+		} else if (flag2 == 2) {
+			scanf("%s", tmps);
+			for (i = 1; i <= cnt; i++) {
+				if (strcmp(MyACC[i].date, tmps) == 0)
+					printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n", i, MyACC[i].accname, MyACC[i].signal,
+					       MyACC[i].money, MyACC[i].date, MyACC[i].name, MyACC[i].type, MyACC[i].ps);
+			}
+		} else if (flag2 == 3) {
+			scanf("%s", tmps);
+			for (i = 1; i <= cnt; i++) {
+				if (strcmp(MyACC[i].name, tmps) == 0)
+					printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n", i, MyACC[i].accname, MyACC[i].signal,
+					       MyACC[i].money, MyACC[i].date, MyACC[i].name, MyACC[i].type, MyACC[i].ps);
+			}
+		} else if (flag2 == 4) {
+			char tmp;
+			cin >> tmp;
+			cin >> tmpi;
+			for (i = 1; i <= cnt; i++) {
+				if (tmp == MyACC[i].signal && tmpi == MyACC[i].money)
+					printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n", i, MyACC[i].accname, MyACC[i].signal,
+					       MyACC[i].money, MyACC[i].date, MyACC[i].name, MyACC[i].type, MyACC[i].ps);
 			}
 		}
-		cout << "从文件 " << filename << " 载入 " << accounts.size() << " 个账户。" << endl;
+		printf("查询完毕！\n");
 	}
+}
+void change() {
+	printf("请输入需要修改的账目序号、账目信息类型、修改后的内容,格式如：\n25 2 20191111\n\n注意：账目信息类型中1代表收支金额，2代表开户人姓名，3代表交易日期，4代表收支项名称，5代表收支类型，6代表备注信息\n");
+	//记得加上&
+	scanf("%d", &Myid);
+	scanf("%d", &field);
+	//getchar()吞掉换行符
+	getchar();
+	if (field == 1)
+		scanf("%c%d", &MyACC[Myid].signal, &MyACC[Myid].money);
+	else if (field == 2)
+		scanf("%s", MyACC[Myid].accname);
+	else if (field == 3)
+		scanf("%s", MyACC[Myid].date);
+	else if (field == 4)
+		scanf("%s", MyACC[Myid].name);
+	else if (field == 5)
+		scanf("%s", MyACC[Myid].type);
+	else if (field == 6)
+		scanf("%s", MyACC[Myid].ps);
+	printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n",
+		Myid, MyACC[Myid].accname, MyACC[Myid].signal,
+		MyACC[Myid].money, MyACC[Myid].date, MyACC[Myid].name,
+		MyACC[Myid].type, MyACC[Myid].ps);
 	
-	// 主循环
-	void run() {
-		const string datafile = "accounts.txt";
-		loadFromFile(datafile);
-		
-		int choice;
-		do {
-			cout << "\n====== 个人银行账户管理系统 ======\n";
-			cout << "当前日: " << currentDate.day << endl;
-			cout << "1. 开户\n";
-			cout << "2. 存款\n";
-			cout << "3. 取款/刷卡\n";
-			cout << "4. 账户查询\n";
-			cout << "5. 所有账户列表\n";
-			cout << "6. 年终结息\n";
-			cout << "0. 退出并保存\n";
-			cout << "请选择: ";
-			if (!(cin >> choice)) break;
-			
-			switch (choice) {
-				case 1: openAccount(); break;
-				case 2: deposit(); break;
-				case 3: withdraw(); break;
-				case 4: showAccount(); break;
-				case 5: listAll(); break;
-				case 6: settle(); break;
-				case 0: saveToFile(datafile); break;
-				default: cout << "无效选择。" << endl; break;
-			}
-		} while (choice != 0);
+}
+void save() {
+	FILE *fp;
+	if ((fp = fopen("out.txt", "w")) == NULL) {
+		printf("无法打开 out.txt 进行写入！\n");
+		return;
+	} else {
+		for (i = 1; i <= cnt; i++) {
+			fprintf(fp, "%d %s %c %d %s %s %s %s\n",
+				i, MyACC[i].accname, MyACC[i].signal,
+				MyACC[i].money, MyACC[i].date, MyACC[i].name,
+				MyACC[i].type, MyACC[i].ps);
+		}
+		printf("保存成功！\n");
 	}
-};
+	fclose(fp);
+}
+bool compare_money(MyAccount A, MyAccount B) {
+	if (A.money > B.money)
+		return true;
+	else
+		return false;
+}
+void moneysort() {
+	//由于vis没有赋初值，所以当不存在负数时，会runtime error
+	for (i = 1; i <= cnt - 1; i++) {
+		for (j = 1; j <= cnt - 1; j++) {
+			//如果是-的放到后面去
+			if (MyACC[j].signal == '-') {
+				T = MyACC[j];
+				MyACC[j] = MyACC[j + 1];
+				MyACC[j + 1] = T;
+			}
+		}
+	}
+	for (i = 1; i <= cnt; i++)
+		if (MyACC[i].signal == '-') {
+			vis = i;
+			break;
+		}
+	if (vis != -1) {
+		//存在支出
+		sort(MyACC + 1, MyACC + vis, compare_money);
+		sort(MyACC + vis, MyACC + cnt + 1, compare_money);
+	} else {
+		sort(MyACC + 1, MyACC + cnt + 1, compare_money);
+	}
 
-// -------------------- main --------------------
+	for (i = 1; i <= cnt; i++) {
+		printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n", i, MyACC[i].accname, MyACC[i].signal, MyACC[i].money, MyACC[i].date, MyACC[i].name, MyACC[i].type, MyACC[i].ps);
+	}
+	printf("已按金额递减排序完成!\n");
+}
+void data_report() {
+	printf("请输入需要统计的日期区间，如：20190909 20190918\n");
+	int a, b;
+	scanf("%d%d", &a, &b);
+	printf("\n%d%d", a, b);
+	int sumplus = 0, summinus = 0, sum = 0;
+	for (j = 1; j <= cnt; j++) {
+		if (MyACC[j].dateint >= a && MyACC[j].dateint <= b) {
+			if (MyACC[j].signal == '+') {
+				sum += MyACC[j].money;
+				sumplus += MyACC[j].money;
+			} else {
+				sum -= MyACC[j].money;
+				summinus += MyACC[j].money;
+			}
+		}
+	}
+	printf("账务统计完成！\n在此阶段，收入：%d元，支出：%d元，结余：%d元\n\n", sumplus, summinus, sum);
+}
+bool compare_date(MyAccount A, MyAccount B) {
+	if (A.dateint < B.dateint)
+		return true;
+	else
+		return false;
+}
+void datasort() {
+	sort(MyACC + 1, MyACC + 1 + cnt, compare_date);
+	for (i = 1; i <= cnt; i++) {
+		printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n", i, MyACC[i].accname, MyACC[i].signal, MyACC[i].money, MyACC[i].date, MyACC[i].name, MyACC[i].type, MyACC[i].ps);
+	}
+	printf("根据日期排序完成！\n");
+}
+void name_sort() {
+	for (int i = 1; i <= cnt; i++)
+		MyACC[i].flag_print = 0;		//0表示没有被输出过
+	for (int i = 1; i <= cnt; i++) {
+		if (!MyACC[i].flag_print) {
+			printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n", i, MyACC[i].accname, MyACC[i].signal, MyACC[i].money, MyACC[i].date, MyACC[i].name, MyACC[i].type, MyACC[i].ps);
+			MyACC[i].flag_print = 1;
+		}
+		for (int j = i + 1; j <= cnt; j++) {
+			if (!strcmp(MyACC[i].name, MyACC[j].name) && !MyACC[j].flag_print) {
+				printf("id:%d 开户人:%s  余额:%c%d  日期:%s  收支项名称:%s  收支项类型:%s  备注:%s\n\n", i, MyACC[i].accname, MyACC[i].signal, MyACC[i].money, MyACC[i].date, MyACC[i].name, MyACC[i].type, MyACC[i].ps);
+				MyACC[j].flag_print = 1;
+			}
+		}
+	}
+}
+void acc_sort() {
+	printf("根据金额排序输入1,根据日期排序输入2,根据名称排序输入3\n");
+	scanf("%d", &flag2);
+	if (flag2 == 1)
+		moneysort();
+	else if (flag2 == 2)
+		datasort();
+	else if (flag2 == 3)
+		name_sort();
+}
+void UI() {
+	cout << endl << endl;
+	cout << "***************************************************************" << endl;
+	cout << "**           请输入以下选项编号进行下一步操作!               **" << endl;
+	cout << "**               1.输入账目                                  **" << endl;
+	cout << "**               2.删除账目明细条目                          **" << endl;
+	cout << "**               3.查询账目明细条目                          **" << endl;
+	cout << "**               4.修改账目明细条目                          **" << endl;
+	cout << "**               5.账务数据排序                              **" << endl;
+	cout << "**               6.财务统计                                  **" << endl;
+	cout << "**               7.保存文件                                  **" << endl;
+	cout << "*****************0.退出系统************************************" << endl;
+}
+
+void clean_stdin() {
+	cin.clear();
+	cin.sync();
+}
+
 int main() {
-	ios::sync_with_stdio(false);
-	cin.tie(nullptr);
-	
-	BankSystem system;
-	system.run();
+	cout << "***********欢迎进入个人帐本管理系统****************************" << endl;
+	system("date /T");
+	system("TIME /T");
+	load_from_file();
+	UI();
+	clean_stdin();
+
+	while (true) {
+		cout << "\n请输入操作编号：";
+		clean_stdin();
+		if (scanf("%d", &flag2) != 1) continue;
+
+		switch (flag2) {
+			case 1:
+				input();
+				break;
+			case 2:
+				del();
+				break;
+			case 3:
+				chaxun();
+				break;
+			case 4:
+				change();
+				break;
+			case 5:
+				acc_sort();
+				break;
+			case 6:
+				data_report();
+				break;
+			case 7:
+				save();
+				break;
+			case 0:
+				exit(0);
+			default:
+				printf("无效输入！\n");
+				break;
+		}
+
+		UI();
+	}
 	return 0;
 }
+
 
