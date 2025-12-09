@@ -1,2 +1,2 @@
-# banking-system
-sophomore cpp course assignment
+# JUST FOR RECORDING AND FUN
+HOPE U LIKE IT
